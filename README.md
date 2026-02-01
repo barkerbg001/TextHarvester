@@ -1,13 +1,14 @@
 # Text Harvester
 
-A FastAPI-based service that extracts structured invoice data from PDF and image files using Ollama (local LLM) and Tesseract OCR. This application intelligently processes invoices and extracts key information into a structured JSON format—all running locally on your machine.
+A FastAPI-based service that extracts structured invoice data from PDF and image files. Choose **Groq** (cloud LLM) or **Ollama** (local LLM)—both use Tesseract OCR for text extraction and return the same structured JSON schema.
 
 ## Features
 
 - 📄 **PDF Text Extraction**: Extracts text directly from PDF documents using PyMuPDF
 - 🖼️ **Image OCR**: Optical Character Recognition for JPEG and PNG images using Tesseract
-- 🤖 **AI-Powered Extraction**: Uses Ollama with local LLMs (Llama 3, Llama 3.2, Mistral, etc.) for intelligent data extraction
-- 🔒 **Fully Local**: No API keys required—all processing happens on your machine
+- 🤖 **Dual LLM Backends**:
+  - **Groq**: Cloud API (Llama 3.3 70B)—fast, requires `GROQ_API_KEY`
+  - **Ollama**: Local models (Llama 3, Mistral, etc.)—no API key, runs on your machine
 - ✅ **Schema Validation**: Automatic validation with Pydantic models ensuring data integrity
 - 🐳 **Docker Support**: Containerized deployment with automatic Tesseract installation
 - 🌐 **Cross-Platform Support**: Works on Windows, macOS, and Linux with automatic Tesseract path detection
@@ -18,11 +19,12 @@ A FastAPI-based service that extracts structured invoice data from PDF and image
 ### For Local Development
 - Python 3.8 or higher
 - Tesseract OCR (version 5.x recommended)
-- Ollama installed and running locally
+- **Groq**: Groq API key (set in `.env`) — [Get one](https://console.groq.com/)
+- **Ollama** (optional): Install and run Ollama locally for the `/ollama` routes
 
 ### For Docker Deployment
 - Docker Desktop (or Docker Engine)
-- Ollama installed and running on the host machine
+- Ollama installed and running on the host machine (for Ollama routes)
 
 ## Quick Start with Docker (Recommended)
 
@@ -64,8 +66,19 @@ The API will be available at: `http://localhost:8000`
 
 ### 4. Test the API
 
+**Groq** (requires `GROQ_API_KEY` in `.env` inside the container or passed at run time):
+
 ```bash
-curl -X POST "http://localhost:8000/process-invoice" \
+curl -X POST "http://localhost:8000/groq/process-invoice" \
+  -H "accept: application/json" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@your-invoice.pdf"
+```
+
+**Ollama** (local; ensure Ollama is running on the host):
+
+```bash
+curl -X POST "http://localhost:8000/ollama/process-invoice" \
   -H "accept: application/json" \
   -H "Content-Type: multipart/form-data" \
   -F "file=@your-invoice.pdf"
@@ -145,7 +158,17 @@ sudo apt install tesseract-ocr
 sudo dnf install tesseract
 ```
 
-### 4. Install Ollama
+### 4. Configure Groq (optional, for `/groq` routes)
+
+Create a `.env` file in the project root:
+
+```env
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+Get your API key from: https://console.groq.com/
+
+### 5. Install Ollama (optional, for `/ollama` routes)
 
 Download and install Ollama from: https://ollama.com/download
 
@@ -186,11 +209,14 @@ The API will be available at: `http://127.0.0.1:8000`
 
 ## API Usage
 
-### Endpoint: POST `/process-invoice`
+The app exposes two routers. Both endpoints accept the same file types and return the same response schema.
 
-Upload a PDF or image file to extract structured invoice data.
+| Router | Endpoint | Backend | API Key |
+|--------|----------|---------|---------|
+| Groq   | `POST /groq/process-invoice`   | Groq (Llama 3.3 70B) | `GROQ_API_KEY` in `.env` |
+| Ollama | `POST /ollama/process-invoice` | Local Ollama (e.g. llama3) | None |
 
-**Supported file formats:**
+**Supported file formats (both endpoints):**
 - `application/pdf` - PDF documents
 - `image/jpeg` - JPEG images
 - `image/png` - PNG images
@@ -200,7 +226,7 @@ Upload a PDF or image file to extract structured invoice data.
 - Content-Type: `multipart/form-data`
 - Body: `file` (binary file upload)
 
-**Response Schema:**
+**Response Schema (same for both):**
 ```json
 {
   "doc_number": "INV-12345",
@@ -231,8 +257,17 @@ Upload a PDF or image file to extract structured invoice data.
 
 ### Example using cURL
 
+**Groq:**
 ```bash
-curl -X POST "http://localhost:8000/process-invoice" \
+curl -X POST "http://localhost:8000/groq/process-invoice" \
+  -H "accept: application/json" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@invoice.pdf"
+```
+
+**Ollama:**
+```bash
+curl -X POST "http://localhost:8000/ollama/process-invoice" \
   -H "accept: application/json" \
   -H "Content-Type: multipart/form-data" \
   -F "file=@invoice.pdf"
@@ -243,8 +278,14 @@ curl -X POST "http://localhost:8000/process-invoice" \
 ```python
 import requests
 
-url = "http://localhost:8000/process-invoice"
+# Groq
+url = "http://localhost:8000/groq/process-invoice"
 files = {"file": open("invoice.pdf", "rb")}
+response = requests.post(url, files=files)
+print(response.json())
+
+# Ollama
+url = "http://localhost:8000/ollama/process-invoice"
 response = requests.post(url, files=files)
 print(response.json())
 ```
@@ -255,24 +296,26 @@ print(response.json())
 const formData = new FormData();
 formData.append('file', fileInput.files[0]);
 
-fetch('http://localhost:8000/process-invoice', {
-  method: 'POST',
-  body: formData
-})
-.then(response => response.json())
-.then(data => console.log(data));
+// Groq
+fetch('http://localhost:8000/groq/process-invoice', { method: 'POST', body: formData })
+  .then(r => r.json()).then(console.log);
+
+// Ollama
+fetch('http://localhost:8000/ollama/process-invoice', { method: 'POST', body: formData })
+  .then(r => r.json()).then(console.log);
 ```
 
 ## How It Works
 
-1. **File Upload**: The application receives a PDF or image file via the API endpoint
+1. **File Upload**: The client sends a PDF or image to either `/groq/process-invoice` or `/ollama/process-invoice`.
 2. **Text Extraction**: 
-   - For PDFs: Uses PyMuPDF to extract text directly from the document
-   - For images: Uses Tesseract OCR to extract text from the image
-3. **AI Processing**: The extracted text is sent to your local Ollama model with a structured prompt designed to extract invoice data
-4. **Response Parsing**: The AI response is cleaned (removes markdown code blocks if present) and parsed as JSON
-5. **Data Validation**: The parsed JSON is validated against the Pydantic schema to ensure data integrity
-6. **Response**: Returns structured invoice data or a detailed error message
+   - For PDFs: PyMuPDF extracts text from the document.
+   - For images: Tesseract OCR extracts text from the image.
+3. **AI Processing**: 
+   - **Groq**: Extracted text is sent to Groq’s Llama 3.3 70B with a JSON schema; response is natively JSON.
+   - **Ollama**: Extracted text is sent to your local Ollama model (e.g. llama3); response is cleaned (markdown code blocks removed) and parsed as JSON.
+4. **Data Validation**: The parsed JSON is validated against the shared Pydantic schema.
+5. **Response**: Structured invoice data is returned, or a detailed error if validation or parsing fails.
 
 ## Docker Configuration
 
@@ -344,7 +387,7 @@ If you get a "tesseract is not installed" error:
    ```
 
 2. **Check automatic detection:**
-   The application automatically checks common installation paths. If Tesseract is installed in a non-standard location, edit `main.py` and add your Tesseract path to the `possible_paths` list in the `configure_tesseract()` function (around line 12-40).
+   The application automatically checks common installation paths. If Tesseract is installed in a non-standard location, edit `main.py` and add your Tesseract path to the `possible_paths` list in the `configure_tesseract()` function.
 
 3. **Windows specific:**
    Ensure Tesseract is installed in one of these locations:
@@ -393,9 +436,14 @@ If you get a connection error:
      docker run --rm -p 8000:8000 --add-host=host.docker.internal:host-gateway textharvester
      ```
 
-### Model Not Found Error
+### Groq API Key / Model Errors
 
-If you get a model not found error:
+- Ensure `.env` contains `GROQ_API_KEY` and the server was restarted after adding it.
+- If the Groq model name changes, update `routers/groq_router.py` (e.g. `model="llama-3.3-70b-versatile"`). See: https://console.groq.com/docs/models
+
+### Ollama Model Not Found
+
+If you get a model not found error when using `/ollama/process-invoice`:
 
 1. **List available models:**
    ```bash
@@ -407,10 +455,7 @@ If you get a model not found error:
    ollama pull llama3
    ```
 
-3. **Update the model in `main.py` if using a different model:**
-   ```python
-   model="llama3"  # Change to your installed model (line 109)
-   ```
+3. **Use a different model:** Edit `routers/ollama_router.py` and change the `model` argument in the `ollama.chat()` call (e.g. `model="llama3"` to `model="mistral"`).
 
    Available models: https://ollama.com/library
 
@@ -419,9 +464,9 @@ If you get a model not found error:
 If you get validation errors about missing fields:
 
 - The LLM may have returned incomplete data
-- Check the raw text extraction quality - poor OCR results can lead to incomplete extraction
-- Try a different Ollama model (some models are better at structured extraction)
-- The application includes error handling to detect if the LLM returns a schema definition instead of data
+- Check the raw text extraction quality—poor OCR can lead to incomplete extraction
+- **Ollama**: Try a different model in `routers/ollama_router.py` (e.g. mistral)
+- **Ollama**: The app detects if the LLM returns a schema definition instead of data and returns a clear error
 
 ### Port Already in Use
 
@@ -441,36 +486,46 @@ docker run --rm -p 8001:8000 textharvester
 
 ```
 TextHarvester/
-├── main.py              # FastAPI application and invoice processing logic
+├── main.py              # FastAPI app, Tesseract config, router registration
+├── schemas.py           # Shared Pydantic models (InvoiceItem, InvoiceSchema)
+├── utils.py             # Shared text extraction (PDF, image OCR)
 ├── requirements.txt     # Python dependencies
 ├── Dockerfile           # Docker container configuration
-├── .gitignore          # Git ignore file
-├── README.md           # This file
-└── samples/            # Sample invoice files (optional)
+├── .env                 # GROQ_API_KEY (create this; not in repo)
+├── .gitignore
+├── README.md
+├── routers/
+│   ├── __init__.py
+│   ├── groq_router.py   # POST /groq/process-invoice (Groq LLM)
+│   └── ollama_router.py # POST /ollama/process-invoice (Ollama local)
+└── samples/             # Sample invoice files (optional)
 ```
 
 ## Dependencies
 
 The project uses the following key dependencies (see `requirements.txt` for versions):
 
-- **FastAPI** (≥0.109.0): Modern, fast web framework for building APIs
-- **Uvicorn** (≥0.27.0): ASGI server for running FastAPI
-- **python-multipart** (≥0.0.6): Required for file uploads
-- **PyMuPDF** (≥1.23.0): PDF text extraction library
-- **pytesseract** (≥0.3.10): Python wrapper for Tesseract OCR
-- **Pillow** (≥10.2.0): Image processing library
-- **ollama** (≥0.4.0): Ollama Python client for local LLM access
-- **Pydantic** (≥2.5.0): Data validation using Python type annotations
+- **FastAPI** (≥0.109.0): Web framework
+- **Uvicorn** (≥0.27.0): ASGI server
+- **python-multipart** (≥0.0.6): File uploads
+- **PyMuPDF** (≥1.23.0): PDF text extraction
+- **pytesseract** (≥0.3.10): Tesseract OCR wrapper
+- **Pillow** (≥10.2.0): Image processing
+- **ollama** (≥0.4.0): Ollama Python client (local LLM)
+- **groq** (≥0.4.0): Groq API client (cloud LLM)
+- **python-dotenv** (≥1.0.0): Load `.env` for `GROQ_API_KEY`
+- **Pydantic** (≥2.5.0): Data validation
 
 ## Technical Details
 
-### AI Model
+### LLM Backends
 
-- **Default Model**: Llama 3 (configurable in `main.py` line 109)
-- **Provider**: Ollama (local)
-- **Response Format**: JSON object
-- **System Prompt**: Configured as an expert accountant for invoice data extraction
-- **Error Handling**: Automatically detects and handles schema definitions returned instead of data
+| Backend | Model | Config |
+|---------|--------|--------|
+| **Groq** | Llama 3.3 70B Versatile | `routers/groq_router.py`; `GROQ_API_KEY` in `.env` |
+| **Ollama** | e.g. llama3 | `routers/ollama_router.py`; run `ollama serve` and pull a model |
+
+Both use an accountant-style system prompt and return JSON validated against the same Pydantic schema. Ollama responses are cleaned of markdown code blocks and checked to ensure the LLM returned data, not a schema definition.
 
 ### OCR Configuration
 
@@ -507,6 +562,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 For issues related to:
 
 - **Tesseract OCR**: https://github.com/tesseract-ocr/tesseract
+- **Groq**: https://console.groq.com/docs
 - **Ollama**: https://ollama.com/ | https://github.com/ollama/ollama
 - **FastAPI**: https://fastapi.tiangolo.com/
 - **PyMuPDF**: https://pymupdf.readthedocs.io/
@@ -514,7 +570,8 @@ For issues related to:
 
 ## Acknowledgments
 
-- Ollama for enabling local LLM inference
-- Tesseract OCR team for the excellent OCR engine
-- FastAPI for the modern Python web framework
+- Groq for fast cloud LLM inference
+- Ollama for local LLM inference
+- Tesseract OCR team for the OCR engine
+- FastAPI for the web framework
 - Docker for containerization support
